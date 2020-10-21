@@ -1,7 +1,10 @@
 """Common transformation."""
 import hashlib
+import json
 
 import requests
+
+from fpl.data.io import load_json
 
 
 def get_game_week(events: list) -> int:
@@ -53,6 +56,17 @@ def add_unique_id(elements: list):
     """
     list(map(lambda x: x.update({"player_id": x.pop("id")}), elements))
     list(map(lambda x: x.update({"id": create_id(x)}), elements))
+
+
+def add_team_name(elements: list, teams: list):
+    """Add team name to element.
+
+    Args:
+        elements (list[dict]): list holding the elements
+        teams (list[dict]): list holding teams
+    """
+    teams = {i["id"]: i["name"] for i in teams}
+    list(map(lambda x: x.update({"team_name": teams[x["team"]]}), elements))
 
 
 def create_opponents(
@@ -128,13 +142,14 @@ def get_team_opponents(all_teams: list, team_name: str, from_gameweek=1, number_
         "has_double_gw": boolean,
     }
     """
-    team_fixtures = all_teams[team_name][from_gameweek - 1 : from_gameweek - 1 + number_fixtures]
-    if from_gameweek + number_fixtures > 1 + len(all_teams[team_name]):
-        number_fixtures = len(all_teams[team_name]) + 1 - from_gameweek
+    team_fixtures = all_teams[team_name][from_gameweek : from_gameweek + number_fixtures]
+    if from_gameweek + number_fixtures > len(all_teams[team_name]):
+        number_fixtures = len(all_teams[team_name]) - from_gameweek
 
     gameweeks = [i["gameweek"] for i in team_fixtures]
     gameweeks = {
-        i: gameweeks.count(i) for i in range(from_gameweek, from_gameweek + number_fixtures, 1)
+        i: gameweeks.count(i)
+        for i in range(from_gameweek + 1, from_gameweek + number_fixtures + 1, 1)
     }
     return {
         "opponents": team_fixtures,
@@ -142,3 +157,52 @@ def get_team_opponents(all_teams: list, team_name: str, from_gameweek=1, number_
         "postponed": bool([i for i in gameweeks if gameweeks[i] < 1]),
         "has_double_gw": bool([i for i in gameweeks if gameweeks[i] > 1]),
     }
+
+
+def _add_next_five(element: dict, all_teams: list):
+    """Add next 5 fixtures to an element.
+
+    Args:
+        element (dict): Player element from /bootstrap-static
+        all_teams (list): All teams element from /boostrap-static
+    """
+    data = get_team_opponents(all_teams, element["team_name"], element["gameweek"], 5)
+    opponents_extracted = {}
+    for i, y in enumerate(data["opponents"]):
+        if y["gameweek"]:
+            opponents_extracted.update(
+                {
+                    "n+{}_opponent".format(i): y["team"],
+                    "n+{}_difficulty".format(i): y["difficulty"],
+                    "n+{}_venue".format(i): y["venue"],
+                    "n+{}_gw".format(i): y["gameweek"],
+                }
+            )
+        else:
+            opponents_extracted.update(
+                {
+                    "n+{}_opponent".format(i): None,
+                    "n+{}_difficulty".format(i): None,
+                    "n+{}_venue".format(i): None,
+                    "n+{}_gw".format(i): element["gameweek"] + 1 + i,
+                }
+            )
+
+    element.update(opponents_extracted)
+    del data["opponents"]
+    del data["in_gameweeks"]
+    element.update(data)
+
+
+def add_opponents(elements: list, all_teams: list):
+    """Update all elements with fixtures.
+
+    Args:
+        elements (list): List holding elements
+        all_teams (list): List holding teams
+    """
+    list(map(lambda x: _add_next_five(x, all_teams), elements))
+
+
+if __name__ == "__main__":
+    pass

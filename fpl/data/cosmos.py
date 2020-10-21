@@ -236,7 +236,7 @@ class CosmoContainer(ABC):
         Args:
             documents (list[dict]): List holding dicts containing at least {"id": str}
         """
-        for document in documents:
+        for document in tqdm(documents, desc="Updating Cosmos"):
             self.container.upsert_item(document)
 
 
@@ -272,4 +272,3 @@ if __name__ == "__main__":
         os.getenv("AZURE_COSMOS_TOKEN"),
         {"database": "fplstats", "container": "elements", "partition_key": "download_time"},
     )
-    test_client.insert_documents("/home/jason/dev/fpl2021/data", latest=True)
